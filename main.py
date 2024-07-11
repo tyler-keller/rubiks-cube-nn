@@ -1,8 +1,13 @@
+from torch.utils.data import Dataset, DataLoader
 from pycuber.solver import CFOPSolver
+import torch.nn.functional as F
+import torch.optim as optim
+import torch.nn as nn
 import pycuber as pc
 import pandas as pd
 import numpy as np
 import torch
+import math
 import os
 
 
@@ -26,13 +31,29 @@ import os
 #             square = color_vectors[vector]
 
 
-class CubeDataset(torch.utils.data.Dataset):
-    def __init__(self, state, next_move):
-        self.state = state
-        self.next_move = next_move
+class CubeDataset(Dataset):
+    def __init__(self, sequences, move_mapping, max_length):
+        self.sequences = sequences
+        self.move_mapping = move_mapping
+        self.max_length = max_length
 
-    def __getitem__(self, index) -> any:
-        return self.state[index], self.next_move[index]
+    def __len__(self):
+        return len(self.sequences)
+
+    def __getitem__(self, idx):
+        sequence = self.sequences[idx]
+        states, moves = zip(*sequence)
+        
+        padded_states = np.zeros((self.max_length, len(states[0])))
+        padded_moves = np.full(self.max_length, -1)  
+        mask = np.zeros(self.max_length, dtype=bool)
+        
+        seq_length = len(states)
+        padded_states[:seq_length] = states
+        padded_moves[:seq_length] = [self.move_mapping[move] for move in moves]
+        mask[:seq_length] = 1
+        
+        return padded_states, padded_moves, mask
 
 
 def convert_cube_to_state(cube):
@@ -56,18 +77,70 @@ def convert_cube_to_state(cube):
     return state
 
 
-def generate_scramble_to_solve():
-    cube = pc.Cube()
-    alg = pc.Formula()
-    random_alg = alg.random()
-    cube(random_alg)
-    original_cube = cube.copy()
-    solver = CFOPSolver(cube)
-    solution = solver.solve(suppress_progress_messages=True)
-    for step in str(solution).split():
-        original_cube.perform_step(step)
-    print(cube)
-    print(original_cube)
+class CubeTransformer(nn.Module):
+    def __init__(self, input_dim, model_dim, num_layers, num_heads, num_moves):
+        super(CubeTransformer, self).__init__()
+        self.embedding = nn.Linear(input_dim, model_dim)
+        self.transformer = nn.Transformer(model_dim, num_heads, num_layers)
+        self.fc_out = nn.Linear(model_dim, num_moves)
+    
+    def forward(self, src):
+        src = self.embedding(src)
+        src = src.permute(1, 0, 2) 
+        output = self.transformer(src)
+        output = self.fc_out(output)
+        return output
 
 
-generate_scramble_to_solve()
+def generate_sequences(n):
+    sequences = []
+    for _ in n:
+        sequence = []
+        cube = pc.Cube()
+        alg = pc.Formula()
+        random_alg = alg.random()
+        cube(random_alg)
+        unsolved_cube = cube.copy()
+        solver = CFOPSolver(cube)
+        solution = solver.solve(suppress_progress_messages=True)
+        for step in str(solution).split():
+            sequence.append((convert_cube_to_state(unsolved_cube), step))
+            unsolved_cube.perform_step(step)
+        sequences.append(sequence)
+    return sequences
+
+
+sequences = generate_sequences(1000)
+move_mapping = {
+    'U': 0, 'U\'': 1, 
+    'L': 2, 'L\'': 3,
+    'F': 4, 'F\'': 5,
+    'R': 6, 'R\'': 7,
+    'B': 8, 'B\'': 9,
+    'D': 10, 'D\'': 11,
+    '$': 12
+} 
+max_length = max(len(seq) for seq in sequences)
+dataset = CubeDataset(sequences, move_mapping, max_length)
+dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+input_dim = 6 * 9 * 6
+model_dim = 512
+num_layers = 6
+num_heads = 8
+num_moves = 12
+
+model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+num_epochs = 100
+
+for epoch in range(num_epochs):
+    for batch in dataloader:
+        states, moves = batch
+        optimizer.zero_grad()
+        outputs = model(states)
+        loss = criterion(outputs, moves)
+        loss.backward()
+        optimizer.step()
