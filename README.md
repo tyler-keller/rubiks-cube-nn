@@ -43,3 +43,14 @@ https://github.com/adrianliaw/PyCuber
 ## Random Thoughts
 
 This could lend itself well to the transformer architecture since it's kinda just sequence modeling.
+
+## TODO
+
+<!-- - convert pycube object to state representation -->
+
+- generate dataset
+    <!-- - state to next move -- then next state to next move -- 'til the cube is solved -->
+    - set it up w/ the nice pytorch loader things
+
+- train the model
+    - i need something to figure out the positional relationship of moves... transformer time???
