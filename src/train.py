@@ -53,22 +53,23 @@ def convert_cube_to_state(cube):
     return state.flatten()
 
 
-with open('../data/train_0.dat', 'r') as f:
-    sequences = []
-    for line in f:
-        sequence = []
-        string_state, solution = line.split('|')
-        unsolved_cube = convert_string_state_to_cube(string_state)
-        for step in str(solution).split():
-            sequence.append((convert_cube_to_state(unsolved_cube), step))
-            unsolved_cube.perform_step(step)
-        sequence.append((convert_cube_to_state(unsolved_cube), '$'))
-        sequences.append(sequence)
-    print(sequences)
-
-max_length = max(len(seq) for seq in sequences)
-dataset = CubeDataset(sequences, move_mapping, max_length)
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+def load_sequences_in_batches(filename, batch_size=1000):
+    with open(filename, 'r') as f:
+        batch = []
+        for i, line in enumerate(f):
+            string_state, solution = line.strip().split('|')
+            unsolved_cube = convert_string_state_to_cube(string_state)
+            sequence = []
+            for step in solution.split():
+                sequence.append((convert_cube_to_state(unsolved_cube), step))
+                unsolved_cube.perform_step(step)
+            sequence.append((convert_cube_to_state(unsolved_cube), '$'))
+            batch.append(sequence)
+            if (i + 1) % batch_size == 0:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
 
 input_dim = 6 * 9 * 6
 model_dim = 512
@@ -82,6 +83,11 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 num_epochs = 100
 log_epoch = 10
+
+for batch in load_sequences_in_batches('../data/train_0.dat', batch_size=1000):
+    max_length = max(len(seq) for seq in batch)
+    dataset = CubeDataset(batch, move_mapping, max_length)
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
 for epoch in range(num_epochs):
     for batch in dataloader:
