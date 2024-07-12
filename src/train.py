@@ -3,6 +3,7 @@ from pycuber.solver import CFOPSolver
 import torch.optim as optim
 import torch.nn as nn
 import pycuber as pc
+from pycuber import *
 import pandas as pd
 import numpy as np
 import torch
@@ -11,26 +12,6 @@ import os
 
 from data import CubeDataset
 from model import CubeTransformer
-
-
-# TODO: only if required... time-consuming to figure out reconstructing from Square objects...
-def convert_string_state_to_cube(state):
-    '''
-    Convert the state representation to a Pycube object.
-    ULFRBD ordered. 6 x 9 x 6 state encoding.
-    '''
-    color_vectors = {
-        np.array([1, 0, 0, 0, 0, 0]): 'blue',
-        np.array([0, 1, 0, 0, 0, 0]): 'green',
-        np.array([0, 0, 1, 0, 0, 0]): 'orange',
-        np.array([0, 0, 0, 1, 0, 0]): 'red',
-        np.array([0, 0, 0, 0, 1, 0]): 'white',
-        np.array([0, 0, 0, 0, 0, 1]): 'yellow',
-    }
-    cube = pc.Cube()
-    for i, face in state:
-        for j, vector in enumerate(face):
-            square = color_vectors[vector]
 
 
 move_mapping = {
@@ -42,6 +23,14 @@ move_mapping = {
     'D': 15, 'D\'': 1, 'D2': 17, '$': 18
 }
 
+
+def convert_string_state_to_cube(string_state) -> Cube:
+    '''
+    Convert the string state to a Pycube object.
+    ULFRBD ordered. 6 x 9 x 6 state encoding.
+    '''
+    cubie_set = set([eval(cubie_string) for cubie_string in string_state.split(';')])
+    return pc.Cube(cubie_set)
 
 def convert_cube_to_state(cube):
     '''
@@ -64,20 +53,18 @@ def convert_cube_to_state(cube):
     return state.flatten()
 
 
-
-with open('../data/training.dat') as f:
+with open('../data/train_0.dat', 'r') as f:
     sequences = []
     for line in f:
-        string_state, solution = line.split(',')
-        cube = convert_string_state_to_cube(string_state)
         sequence = []
-        unsolved_cube = ''
+        string_state, solution = line.split('|')
+        unsolved_cube = convert_string_state_to_cube(string_state)
         for step in str(solution).split():
-            sequence.append(unsolved_cube, step)
-            f.write()
+            sequence.append((convert_cube_to_state(unsolved_cube), step))
             unsolved_cube.perform_step(step)
         sequence.append((convert_cube_to_state(unsolved_cube), '$'))
         sequences.append(sequence)
+    print(sequences)
 
 max_length = max(len(seq) for seq in sequences)
 dataset = CubeDataset(sequences, move_mapping, max_length)

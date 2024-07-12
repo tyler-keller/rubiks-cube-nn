@@ -40,10 +40,6 @@ https://www.kaggle.com/datasets/antbob/rubiks-cube-cfop-solutions/data
 
 https://github.com/adrianliaw/PyCuber
 
-## Random Thoughts
-
-This could lend itself well to the transformer architecture since it's kinda just sequence modeling.
-
 ## TODO
 
 <!-- - convert pycube object to state representation -->

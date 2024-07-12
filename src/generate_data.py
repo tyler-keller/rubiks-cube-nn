@@ -1,4 +1,5 @@
 import pycuber as pc
+from pycuber import *
 from pycuber.solver import CFOPSolver
 import numpy as np
 import os
@@ -13,19 +14,24 @@ def convert_cube_to_string(cube):
     return ' '.join(squares)
 
 
+def convert_cube_to_cubie_strings(cube):
+    return ';'.join([str(cubie[1]) for cubie in cube])
+
+
 os.makedirs('../data', exist_ok=True)
-with open('../data/train.dat', 'w+') as f:
-    sequence = ''
-    log_i = 100
-    n = 10_000
-    for i in range(n):
-        sequence = []
-        cube = pc.Cube()
-        alg = pc.Formula()
-        random_alg = alg.random()
-        cube(random_alg)
-        unsolved_cube = cube.copy()
-        solver = CFOPSolver(cube)
-        solution = solver.solve(suppress_progress_messages=True)
-        if i % log_i == 0:
-            print(f'Sequence {i} of {n}...')
+for bruh in range(70):
+    print(f'file {bruh} of 69')
+    with open(f'../data/train_{bruh}.dat', 'w+') as f:
+        log_i = 500
+        n = 10_000
+        for i in range(n):
+            cube = pc.Cube()
+            alg = pc.Formula()
+            random_alg = alg.random()
+            cube(random_alg)
+            unsolved_cube = cube.copy()
+            solver = CFOPSolver(cube)
+            solution = solver.solve(suppress_progress_messages=True)
+            f.write(f'{convert_cube_to_cubie_strings(unsolved_cube)}|{solution}\n')
+            if i % log_i == 0:
+                print(f'Sequence {i} of {n}...')
