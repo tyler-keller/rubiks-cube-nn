@@ -82,8 +82,10 @@ num_layers = 6
 num_heads = 8
 num_moves = len(move_mapping)
 
-# model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
-model = CubeNN(input_dim, model_dim, num_layers, num_heads, num_moves)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
+# model = CubeNN(input_dim, model_dim, num_layers, num_moves)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -103,7 +105,7 @@ for epoch in range(num_epochs):
         tgt[:, 1:] = states[:, :-1]
         optimizer.zero_grad()
         outputs = model(states, tgt)
-        loss = criterion(outputs.view(-1, num_moves), moves.view(-1))  # Reshape for CrossEntropyLoss
+        loss = criterion(outputs.view(-1, num_moves), moves.view(-1))
         loss.backward()
         optimizer.step()
         if num_epochs % log_epoch == 0:

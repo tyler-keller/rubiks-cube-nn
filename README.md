@@ -34,6 +34,11 @@ The issue w/ an entire cube state to move state sequence is they're different le
 
 My goal is to train on enough data that we start to see CFOP-esque moves emerge from the weights.
 
+
+Our sequence data is many-to-one. Input is a sequence of cube states. Output is a class label (indicating what move to take).
+
+
+
 ## Training
 
 I'll be using the Pycuber library to generate training data.
