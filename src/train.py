@@ -32,6 +32,7 @@ def convert_string_state_to_cube(string_state) -> Cube:
     cubie_set = set([eval(cubie_string) for cubie_string in string_state.split(';')])
     return pc.Cube(cubie_set)
 
+
 def convert_cube_to_state(cube):
     '''
     Convert a cube object to the NN state representation.
@@ -53,10 +54,18 @@ def convert_cube_to_state(cube):
     return state.flatten()
 
 
-def load_sequences_in_batches(filename, batch_size=1000):
+def load_sequences(filename, num_sequences=1000):
+    '''Load a train.dat file and transform it into a series of cube states to move sequences.
+    '''
     with open(filename, 'r') as f:
-        batch = []
+        print(f'OPENING FILE: {filename}')
+        log_i = 100
+        sequences = []
         for i, line in enumerate(f):
+            if i == num_sequences:
+                return sequences
+            if i % log_i == 0:
+                print(f'LINE: {i}')
             string_state, solution = line.strip().split('|')
             unsolved_cube = convert_string_state_to_cube(string_state)
             sequence = []
@@ -64,12 +73,9 @@ def load_sequences_in_batches(filename, batch_size=1000):
                 sequence.append((convert_cube_to_state(unsolved_cube), step))
                 unsolved_cube.perform_step(step)
             sequence.append((convert_cube_to_state(unsolved_cube), '$'))
-            batch.append(sequence)
-            if (i + 1) % batch_size == 0:
-                yield batch
-                batch = []
-        if batch:
-            yield batch
+            sequences.append(sequence)
+        return sequences
+
 
 input_dim = 6 * 9 * 6
 model_dim = 512
@@ -84,18 +90,21 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 num_epochs = 100
 log_epoch = 10
 
-for batch in load_sequences_in_batches('../data/train_0.dat', batch_size=1000):
-    max_length = max(len(seq) for seq in batch)
-    dataset = CubeDataset(batch, move_mapping, max_length)
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+sequences = load_sequences('../data/train_0.dat', num_sequences=100)
+
+dataset = CubeDataset(sequences=sequences, move_mapping=move_mapping, max_length=max([len(x) for x in sequences]))
+dataloader = DataLoader(dataset=dataset)
 
 for epoch in range(num_epochs):
     for batch in dataloader:
         print(batch)
         states, moves = batch
+        states = states.float()
+        tgt = torch.zeros_like(states)
+        tgt[:, 1:] = states[:, :-1]
         optimizer.zero_grad()
-        outputs = model(states)
-        loss = criterion(outputs, moves)
+        outputs = model(states, tgt)
+        loss = criterion(outputs.view(-1, num_moves), moves.view(-1))  # Reshape for CrossEntropyLoss
         loss.backward()
         optimizer.step()
         if num_epochs % log_epoch == 0:

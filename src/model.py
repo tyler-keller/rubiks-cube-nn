@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 
 
 class CubeTransformer(nn.Module):
@@ -8,9 +9,11 @@ class CubeTransformer(nn.Module):
         self.transformer = nn.Transformer(model_dim, num_heads, num_layers)
         self.fc_out = nn.Linear(model_dim, num_moves)
     
-    def forward(self, src):
+    def forward(self, src, tgt):
         src = self.embedding(src)
         src = src.permute(1, 0, 2) 
-        output = self.transformer(src)
+        tgt = self.embedding(tgt)
+        tgt = tgt.permute(1, 0, 2) 
+        output = self.transformer(src, tgt)
         output = self.fc_out(output)
-        return output
+        return output.permute(1, 0, 2)
