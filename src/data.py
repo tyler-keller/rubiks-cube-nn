@@ -15,12 +15,12 @@ class CubeDataset(Dataset):
         states, moves = zip(*sequence)
         
         padded_states = np.zeros((self.max_length, len(states[0])))
-        padded_moves = np.full(self.max_length, -1)  
+        padded_moves = np.full(self.max_length, -1)
         mask = np.zeros(self.max_length, dtype=bool)
         
         seq_length = len(states)
         padded_states[:seq_length] = states
-        padded_moves[:seq_length] = [self.move_mapping[move] for move in moves]
+        padded_moves[:seq_length] = moves
         mask[:seq_length] = 1
         
         return padded_states, padded_moves

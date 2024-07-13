@@ -10,18 +10,8 @@ import torch
 import math
 import os
 
-from data import CubeDataset
-from model import CubeTransformer
-
-
-move_mapping = {
-    'U': 0, 'U\'': 1, 'U2': 2,
-    'L': 3, 'L\'': 4, 'L2': 5,
-    'F': 6, 'F\'': 1, 'F2': 8,
-    'R': 9, 'R\'': 1, 'R2': 11,
-    'B': 12, 'B\'': 1, 'B2': 14,
-    'D': 15, 'D\'': 1, 'D2': 17, '$': 18
-}
+from data import *
+from model import *
 
 
 def convert_string_state_to_cube(string_state) -> Cube:
@@ -54,7 +44,7 @@ def convert_cube_to_state(cube):
     return state.flatten()
 
 
-def load_sequences(filename, num_sequences=1000):
+def load_sequences(filename, move_mapping, num_sequences=1000):
     '''Load a train.dat file and transform it into a series of cube states to move sequences.
     '''
     with open(filename, 'r') as f:
@@ -70,12 +60,21 @@ def load_sequences(filename, num_sequences=1000):
             unsolved_cube = convert_string_state_to_cube(string_state)
             sequence = []
             for step in solution.split():
-                sequence.append((convert_cube_to_state(unsolved_cube), step))
+                sequence.append((convert_cube_to_state(unsolved_cube), move_mapping[step]))
                 unsolved_cube.perform_step(step)
-            sequence.append((convert_cube_to_state(unsolved_cube), '$'))
+            sequence.append((convert_cube_to_state(unsolved_cube), move_mapping['$']))
             sequences.append(sequence)
         return sequences
 
+
+move_mapping = {
+    'U': 0, 'U\'': 1, 'U2': 2,
+    'L': 3, 'L\'': 4, 'L2': 5,
+    'F': 6, 'F\'': 1, 'F2': 8,
+    'R': 9, 'R\'': 1, 'R2': 11,
+    'B': 12, 'B\'': 1, 'B2': 14,
+    'D': 15, 'D\'': 1, 'D2': 17, '$': 18
+}
 
 input_dim = 6 * 9 * 6
 model_dim = 512
@@ -83,22 +82,22 @@ num_layers = 6
 num_heads = 8
 num_moves = len(move_mapping)
 
-model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
+# model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
+model = CubeNN(input_dim, model_dim, num_layers, num_heads, num_moves)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 num_epochs = 100
 log_epoch = 10
 
-sequences = load_sequences('../data/train_0.dat', num_sequences=100)
+sequences = load_sequences('../data/train_0.dat', move_mapping=move_mapping, num_sequences=100)
 
 dataset = CubeDataset(sequences=sequences, move_mapping=move_mapping, max_length=max([len(x) for x in sequences]))
 dataloader = DataLoader(dataset=dataset)
 
 for epoch in range(num_epochs):
-    for batch in dataloader:
-        print(batch)
-        states, moves = batch
+    for sequence in dataloader:
+        states, moves = sequence
         states = states.float()
         tgt = torch.zeros_like(states)
         tgt[:, 1:] = states[:, :-1]
