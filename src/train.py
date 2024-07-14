@@ -67,6 +67,34 @@ def load_sequences(filename, move_mapping, num_sequences=1000):
         return sequences
 
 
+def train(dataloader: DataLoader):
+    model.train()
+    total_acc, total_loss = 0, 0
+    for text_batch, label_batch, lengths in dataloader:
+        optimizer.zero_grad()
+        pred = model(text_batch, lengths)[:, 0]
+        loss = loss_fn(pred, label_batch)
+        loss.backward()
+        optimizer.step()
+        total_acc += (
+            (pred >= 0.5).float() == label_batch
+        ).float().sum().item()
+        total_loss += loss.item() * label_batch.size(0)
+    return total_acc/len(dataloader.dataset), total_loss/len(dataloader.dataset)
+
+def evaluate(dataloader: DataLoader):
+    model.eval()
+    total_acc, total_loss = 0, 0
+    with torch.no_grad():
+        for text_batch, label_batch, lengths in dataloader:
+            pred = model(text_batch, lengths)[:, 0]
+            loss = loss_fn(pred, label_batch)
+            total_acc += (
+                (pred >= 0.5).float() == label_batch
+            ).float().sum().item()
+            total_loss += loss.item() * label_batch.size(0)
+    return total_acc/len(dataloader.dataset), total_loss/len(dataloader.dataset)
+
 move_mapping = {
     'U': 0, 'U\'': 1, 'U2': 2,
     'L': 3, 'L\'': 4, 'L2': 5,
@@ -78,15 +106,13 @@ move_mapping = {
 
 input_dim = 6 * 9 * 6
 model_dim = 512
-num_layers = 6
-num_heads = 8
-num_moves = len(move_mapping)
+output_dim = len(move_mapping)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
-# model = CubeNN(input_dim, model_dim, num_layers, num_moves)
-criterion = nn.CrossEntropyLoss()
+# model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
+model = CubeRNN(input_dim, model_dim, output_dim)
+loss_fn = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 num_epochs = 100
@@ -97,16 +123,5 @@ sequences = load_sequences('../data/train_0.dat', move_mapping=move_mapping, num
 dataset = CubeDataset(sequences=sequences, move_mapping=move_mapping, max_length=max([len(x) for x in sequences]))
 dataloader = DataLoader(dataset=dataset)
 
-for epoch in range(num_epochs):
-    for sequence in dataloader:
-        states, moves = sequence
-        states = states.float()
-        tgt = torch.zeros_like(states)
-        tgt[:, 1:] = states[:, :-1]
-        optimizer.zero_grad()
-        outputs = model(states, tgt)
-        loss = criterion(outputs.view(-1, num_moves), moves.view(-1))
-        loss.backward()
-        optimizer.step()
-        if num_epochs % log_epoch == 0:
-            print(f'Epochs: {num_epochs} Loss: {loss}')
+for sequences, moves in dataloader:
+    print(sequences[0], moves[0])

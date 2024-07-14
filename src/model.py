@@ -3,8 +3,8 @@ import torch.nn as nn
 
 
 class CubeTransformer(nn.Module):
-    def __init__(self, input_dim, model_dim, num_layers, num_heads, num_moves):
-        super(CubeTransformer, self).__init__()
+    def __init__(self, input_dim, model_dim, hidden_dim, num_layers, num_heads, num_moves):
+        super().__init__()
         self.embedding = nn.Linear(input_dim, model_dim)
         self.transformer = nn.Transformer(model_dim, num_heads, num_layers)
         self.fc_out = nn.Linear(model_dim, num_moves)
@@ -17,17 +17,23 @@ class CubeTransformer(nn.Module):
         return output.permute(1, 0, 2)
 
 
-class CubeNN(nn.Module):
-    def __init__(self, input_dim, model_dim, num_layers, num_moves):
-        super(CubeNN, self).__init__()
-        layers = []
-        layers.append(nn.Linear(input_dim, model_dim))
-        layers.append(nn.ReLU())
-        for _ in range(num_layers - 1):
-            layers.append(nn.Linear(model_dim, model_dim))
-            layers.append(nn.ReLU())
-        layers.append(nn.Linear(model_dim, num_moves))
-        self.network = nn.Sequential(*layers)
-    
-    def forward(self, x):
-        return self.network(x)
+class CubeRNN(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super().__init__()
+        self.rnn = nn.RNN(input_dim, hidden_dim, batch_first=True)
+        self.fc1 = nn.Linear(hidden_dim, hidden_dim)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+        self.softmax = nn.Softmax()
+
+    def forward(self, x, lengths):
+        out = nn.utils.rnn.pack_padded_sequence(
+            x, lengths.cpu().numpy(), enforce_sorted=False, batch_first=True
+        )
+        out, (hidden, cell) = self.rnn(out)
+        out = hidden[-1, :, :]
+        out = self.fc1(out)
+        out = self.relu(out)
+        out = self.fc2(out)
+        out = self.softmax(out)
+        return out
