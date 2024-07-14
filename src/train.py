@@ -23,6 +23,7 @@ def convert_string_state_to_cube(string_state) -> Cube:
     return pc.Cube(cubie_set)
 
 
+
 def convert_cube_to_state(cube):
     '''
     Convert a cube object to the NN state representation.
