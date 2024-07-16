@@ -18,22 +18,18 @@ class CubeTransformer(nn.Module):
 
 
 class CubeRNN(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
-        super().__init__()
-        self.rnn = nn.RNN(input_dim, hidden_dim, batch_first=True)
-        self.fc1 = nn.Linear(hidden_dim, hidden_dim)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
-        self.softmax = nn.Softmax()
-
-    def forward(self, x, lengths):
-        out = nn.utils.rnn.pack_padded_sequence(
-            x, lengths.cpu().numpy(), enforce_sorted=False, batch_first=True
-        )
-        out, (hidden, cell) = self.rnn(out)
-        out = hidden[-1, :, :]
-        out = self.fc1(out)
-        out = self.relu(out)
-        out = self.fc2(out)
+    def __init__(self, num_pieces, embedding_dim, hidden_size, output_size, num_layers=1):
+        super(CubeRNN, self).__init__()
+        self.hidden_size = hidden_size
+        self.embedding = nn.Embedding(num_pieces, embedding_dim)
+        self.rnn = nn.RNN(embedding_dim, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
+        self.softmax = nn.Softmax(dim=-1)
+    
+    def forward(self, x):
+        x = self.embedding(x)
+        h0 = torch.zeros(1, x.size(0), self.hidden_size)
+        out, _ = self.rnn(x, h0)
+        out = self.fc(out[:, -1, :]) 
         out = self.softmax(out)
         return out
