@@ -1,11 +1,14 @@
+from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import Dataset, DataLoader
 from pycuber.solver import CFOPSolver
+from datetime import datetime
 import torch.optim as optim
 import torch.nn as nn
 import pycuber as pc
 from pycuber import *
 import pandas as pd
 import numpy as np
+import random
 import torch
 import math
 import os
@@ -13,115 +16,150 @@ import os
 from data import *
 from model import *
 
+def encode_cube(cube):
+    piece_to_index_mapping = {}
+    location_to_array_position_mapping = {}
+    cube = pc.Cube()
+    index = 0
+    for c in cube:
+        piece_to_index_mapping[tuple([str(square[1]) for square in c[1]])] = index
+        location_to_array_position_mapping[c[0]] = index
+        index += 1
+    cube_array = [None for _ in range(26)]
+    for i, cubie_tuple in enumerate(cube):
+        location, cubie = cubie_tuple
+        squares = []
+        for square in cubie:
+            squares.append(str(square[1]))
+        squares = tuple(squares)
+        cube_array[location_to_array_position_mapping[location]] = piece_to_index_mapping[squares]
+    return torch.Tensor([c for c in cube_array]).to(torch.int64)
 
-def convert_string_state_to_cube(string_state) -> Cube:
-    '''
-    Convert the string state to a Pycube object.
-    ULFRBD ordered. 6 x 9 x 6 state encoding.
-    '''
-    cubie_set = set([eval(cubie_string) for cubie_string in string_state.split(';')])
-    return pc.Cube(cubie_set)
 
-
-def convert_cube_to_state(cube):
-    '''
-    Convert a cube object to the NN state representation.
-    ULFRBD ordered. 6 x 9 x 6 state encoding.
-    '''
-    color_vectors = {
-        'b': np.array([1, 0, 0, 0, 0, 0]),
-        'g': np.array([0, 1, 0, 0, 0, 0]),
-        'o': np.array([0, 0, 1, 0, 0, 0]),
-        'r': np.array([0, 0, 0, 1, 0, 0]),
-        'w': np.array([0, 0, 0, 0, 1, 0]),
-        'y': np.array([0, 0, 0, 0, 0, 1]),
+def encode_move(move):
+    move_mapping = {
+        'U': 0, 'U\'': 1,
+        'L': 2, 'L\'': 3,
+        'F': 4, 'F\'': 5,
+        'R': 6, 'R\'': 7,
+        'B': 8, 'B\'': 9,
+        'D': 10, 'D\'': 11,
+        '$': 12
     }
-    state = np.zeros(shape=(6, 9, 6))
-    for i, face in enumerate('ULFRBD'):
-        unpacked_face = [str(x)[1] for x in np.array(cube.get_face(face)).flatten()]
-        for j, square in enumerate(unpacked_face):
-            state[i, j] = color_vectors[square]
-    return state.flatten()
+    return move_mapping[move]
 
 
-def load_sequences(filename, move_mapping, num_sequences=1000):
-    '''Load a train.dat file and transform it into a series of cube states to move sequences.
-    '''
-    with open(filename, 'r') as f:
-        print(f'OPENING FILE: {filename}')
-        log_i = 100
-        sequences = []
-        for i, line in enumerate(f):
-            if i == num_sequences:
-                return sequences
-            if i % log_i == 0:
-                print(f'LINE: {i}')
-            string_state, solution = line.strip().split('|')
-            unsolved_cube = convert_string_state_to_cube(string_state)
-            sequence = []
-            for step in solution.split():
-                sequence.append((convert_cube_to_state(unsolved_cube), move_mapping[step]))
-                unsolved_cube.perform_step(step)
-            sequence.append((convert_cube_to_state(unsolved_cube), move_mapping['$']))
-            sequences.append(sequence)
-        return sequences
+def random_line(filename, prev_lines):
+    with open(filename, 'r') as file:
+        rand_line = next(file)
+        rand_num = 0
+        for num, line in enumerate(file, 2):
+            if random.randrange(num) or num in prev_lines:
+                continue
+            rand_line = line
+            rand_num = num
+        return rand_num, rand_line
+
+def yield_sequences(filename, num_sequences=1000):
+    i = 0
+    prev_lines = []
+    while i < num_sequences:
+        line_num, line = random_line(filename, prev_lines)
+        prev_lines.append(line_num)
+        cubies_string, solution_string = line.split('|')
+        mapping = {'U2': 'U U', 'L2': 'L L', 'R2': 'R R', 'F2': 'F F', 'D2': 'D D', 'B2': 'B B'}
+        for k, v in mapping.items():
+            solution_string = solution_string.replace(k, v)
+        cubies_set = set([eval(cubie_string) for cubie_string in cubies_string.split(';')])
+        cube = pc.Cube(cubies_set)
+        moves = solution_string.split()
+        cube_states = []
+        move_states = []
+        for move in moves:
+            cube_states.append(encode_cube(cube))
+            move_states.append(encode_move(move))
+            cube.perform_step(move)
+        cube_states.append(encode_cube(cube))
+        move_states.append(encode_move('$'))
+        if i % 100 == 0:
+            print(f'Sequnce {i} of {num_sequences}')
+        i += 1
+        sequence = cube_states, move_states
+        yield sequence
 
 
-def train(dataloader: DataLoader):
-    model.train()
-    total_acc, total_loss = 0, 0
-    for text_batch, label_batch, lengths in dataloader:
+def train_one_epoch(epoch_index, tb_writer):
+    running_loss = 0.
+    last_loss = 0.
+    num_sequences = 1000
+    for i, sequence in enumerate(yield_sequences('../data/train_0.dat', num_sequences=num_sequences)):
+        cube_states, move_states = sequence
+        input_tensor = torch.stack(cube_states)
+        output_tensor = torch.Tensor([m for m in move_states]).to(torch.int64)
         optimizer.zero_grad()
-        pred = model(text_batch, lengths)[:, 0]
-        loss = loss_fn(pred, label_batch)
+        outputs = model(input_tensor)
+        loss = loss_fn(outputs, output_tensor)
         loss.backward()
         optimizer.step()
-        total_acc += (
-            (pred >= 0.5).float() == label_batch
-        ).float().sum().item()
-        total_loss += loss.item() * label_batch.size(0)
-    return total_acc/len(dataloader.dataset), total_loss/len(dataloader.dataset)
+        running_loss += loss.item()
+        running_loss += loss.item()
+        if i % 1000 == 999:
+            last_loss = running_loss / 1000 
+            print(f'    batch {i + 1} loss: {last_loss}')
+            tb_x = epoch_index * len(num_sequences) + i + 1
+            tb_writer.add_scalar('Loss/train', last_loss, tb_x)
+            running_loss = 0.
+    return last_loss
 
-def evaluate(dataloader: DataLoader):
-    model.eval()
-    total_acc, total_loss = 0, 0
-    with torch.no_grad():
-        for text_batch, label_batch, lengths in dataloader:
-            pred = model(text_batch, lengths)[:, 0]
-            loss = loss_fn(pred, label_batch)
-            total_acc += (
-                (pred >= 0.5).float() == label_batch
-            ).float().sum().item()
-            total_loss += loss.item() * label_batch.size(0)
-    return total_acc/len(dataloader.dataset), total_loss/len(dataloader.dataset)
 
 move_mapping = {
-    'U': 0, 'U\'': 1, 'U2': 2,
-    'L': 3, 'L\'': 4, 'L2': 5,
-    'F': 6, 'F\'': 7, 'F2': 8,
-    'R': 9, 'R\'': 10, 'R2': 11,
-    'B': 12, 'B\'': 13, 'B2': 14,
-    'D': 15, 'D\'': 16, 'D2': 17, '$': 18
+    'U': 0, 'U\'': 1,
+    'L': 2, 'L\'': 3,
+    'F': 4, 'F\'': 5,
+    'R': 6, 'R\'': 7,
+    'B': 8, 'B\'': 9,
+    'D': 10, 'D\'': 11,
+    '$': 12
 }
 
-input_dim = 6 * 9 * 6
 model_dim = 512
 output_dim = len(move_mapping)
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
-model = CubeRNN(input_dim, model_dim, output_dim)
+model = CubeRNN(num_pieces=26, embedding_dim=16, hidden_size=model_dim, output_size=output_dim, num_layers=1)
 loss_fn = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-num_epochs = 100
-log_epoch = 10
+timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+writer = SummaryWriter('runs/fashion_trainer_{}'.format(timestamp))
+epoch_number = 0
 
-sequences = load_sequences('../data/train_0.dat', move_mapping=move_mapping, num_sequences=100)
+EPOCHS = 5
 
-dataset = CubeDataset(sequences=sequences, move_mapping=move_mapping, max_length=max([len(x) for x in sequences]))
-dataloader = DataLoader(dataset=dataset)
+best_vloss = 1_000_000.
 
-for sequences, moves in dataloader:
-    print(sequences[0], moves[0])
+for epoch in range(EPOCHS):
+    print(f'EPOCH {epoch_number + 1}:')
+    model.train(True)
+    avg_loss = train_one_epoch(epoch_number, writer)
+    running_vloss = 0.0
+    model.eval()
+    with torch.no_grad():
+        for i, vdata in enumerate(yield_sequences('../data/train_12.dat', num_sequences=500)):
+            vinputs, vlabels = vdata
+            voutputs = model(vinputs)
+            vloss = loss_fn(voutputs, vlabels)
+            running_vloss += vloss
+    avg_vloss = running_vloss / (i + 1)
+    print('LOSS train {} valid {}'.format(avg_loss, avg_vloss))
+    writer.add_scalars('Training vs. Validation Loss',
+                    { 'Training' : avg_loss, 'Validation' : avg_vloss },
+                    epoch_number + 1)
+    writer.flush()
+    if avg_vloss < best_vloss:
+        best_vloss = avg_vloss
+        model_path = 'model_{}_{}'.format(timestamp, epoch_number)
+        torch.save(model.state_dict(), model_path)
+    epoch_number += 1
