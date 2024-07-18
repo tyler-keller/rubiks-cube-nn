@@ -128,7 +128,7 @@ output_dim = len(move_mapping)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
-model = CubeRNN(num_pieces=26, embedding_dim=16, hidden_size=model_dim, output_size=output_dim, num_layers=1)
+model = CubeRNN(num_pieces=26, embedding_dim=16, hidden_size=model_dim, output_size=output_dim, num_layers=1, device=device)
 loss_fn = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
