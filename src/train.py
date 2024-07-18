@@ -88,7 +88,7 @@ def yield_sequences(filename, num_sequences=1000):
         yield sequence
 
 
-def train_one_epoch(epoch_index, tb_writer):
+def train_one_epoch(epoch_index, tb_writer, model):
     running_loss = 0.
     last_loss = 0.
     num_sequences = 1000
@@ -142,7 +142,7 @@ best_vloss = 1_000_000.
 for epoch in range(EPOCHS):
     print(f'EPOCH {epoch + 1}:')
     model.train(True)
-    avg_loss = train_one_epoch(epoch, writer)
+    avg_loss = train_one_epoch(epoch, writer, model)
     running_vloss = 0.0
     model.eval()
     with torch.no_grad():

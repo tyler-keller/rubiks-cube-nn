@@ -18,8 +18,9 @@ class CubeTransformer(nn.Module):
 
 
 class CubeRNN(nn.Module):
-    def __init__(self, num_pieces, embedding_dim, hidden_size, output_size, num_layers=1):
+    def __init__(self, num_pieces, embedding_dim, hidden_size, output_size, num_layers=1, device='cpu'):
         super(CubeRNN, self).__init__()
+        self.device = device
         self.hidden_size = hidden_size
         self.embedding = nn.Embedding(num_pieces, embedding_dim)
         self.rnn = nn.RNN(embedding_dim, hidden_size, num_layers, batch_first=True)
@@ -29,7 +30,7 @@ class CubeRNN(nn.Module):
     def forward(self, x):
         x = self.embedding(x)
         h0 = torch.zeros(1, x.size(0), self.hidden_size)
-        out, _ = self.rnn(x, h0)
+        out, _ = self.rnn(x, h0).to(self.device)
         out = self.fc(out[:, -1, :]) 
         out = self.softmax(out)
         return out
