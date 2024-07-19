@@ -31,6 +31,8 @@ W/ a block size of 8, starting from a completely solved cube -- we're taking the
 
 I'm not sure what will end up working the best -- feeding in an entire cube state to move state sequence per batch (this will be the first I try) or some subset of moves in a scramble to solve state sequence.
 
+Another option might be to break down the stages of cube solving -- Cross, F2L, OLL, PLL -- and train separate models to complete each of these tasks... could be interesting.
+
 The issue w/ an entire cube state to move state sequence is they're different lengths. I'd have to use some type of padding.
 
 
