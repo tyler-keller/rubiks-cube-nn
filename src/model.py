@@ -28,7 +28,7 @@ class CubeRNN(nn.Module):
         self.softmax = nn.Softmax(dim=-1)
     
     def forward(self, x):
-        x = self.embedding(x)
+        x = self.embedding(x).to(self.device)
         h0 = torch.zeros(1, x.size(0), self.hidden_size).to(self.device)
         out, _ = self.rnn(x, h0)
         out = self.fc(out[:, -1, :]) 

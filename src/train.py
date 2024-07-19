@@ -16,12 +16,13 @@ import os
 from data import *
 from model import *
 
+
 def encode_cube(cube):
     piece_to_index_mapping = {}
     location_to_array_position_mapping = {}
-    cube = pc.Cube()
+    mapping_cube = pc.Cube()
     index = 0
-    for c in cube:
+    for c in mapping_cube:
         piece_to_index_mapping[tuple([str(square[1]) for square in c[1]])] = index
         location_to_array_position_mapping[c[0]] = index
         index += 1
@@ -88,14 +89,13 @@ def yield_sequences(filename, num_sequences=1000):
         yield sequence
 
 
-def train_one_epoch(epoch_index, tb_writer, model):
+def train_one_epoch(epoch_index, tb_writer, model, device, num_sequences):
     running_loss = 0.
     last_loss = 0.
-    num_sequences = 1000
     for i, sequence in enumerate(yield_sequences('../data/train_0.dat', num_sequences=num_sequences)):
         cube_states, move_states = sequence
-        input_tensor = torch.stack(cube_states)
-        output_tensor = torch.Tensor(move_states).to(torch.int64)
+        input_tensor = torch.stack(cube_states).to(device)
+        output_tensor = torch.Tensor(move_states).to(torch.int64).to(device)
         optimizer.zero_grad()
         outputs = model(input_tensor)
         loss = loss_fn(outputs, output_tensor)
@@ -103,7 +103,7 @@ def train_one_epoch(epoch_index, tb_writer, model):
         optimizer.step()
         running_loss += loss.item()
         running_loss += loss.item()
-        if i % 1000 == 999:
+        if i % 10 == 0:
             last_loss = running_loss / 1000 
             print(f'    batch {i + 1} loss: {last_loss}')
             tb_x = epoch_index * num_sequences + i + 1
@@ -122,7 +122,7 @@ move_mapping = {
     '$': 12
 }
 
-model_dim = 512
+model_dim = 1028
 output_dim = len(move_mapping)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -132,24 +132,30 @@ model = CubeRNN(num_pieces=26, embedding_dim=16, hidden_size=model_dim, output_s
 loss_fn = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-writer = SummaryWriter('runs/fashion_trainer_{}'.format(timestamp))
+if torch.cuda.is_available():
+    model.cuda()
 
-EPOCHS = 5
+timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+writer = SummaryWriter('runs/rubiks_cube_nn_{}'.format(timestamp))
+
+EPOCHS = 25 
 
 best_vloss = 1_000_000.
+
+print(f'Device: {device}')
+print()
 
 for epoch in range(EPOCHS):
     print(f'EPOCH {epoch + 1}:')
     model.train(True)
-    avg_loss = train_one_epoch(epoch, writer, model)
+    avg_loss = train_one_epoch(epoch, writer, model, device, num_sequences=250)
     running_vloss = 0.0
     model.eval()
     with torch.no_grad():
-        for i, vdata in enumerate(yield_sequences('../data/train_12.dat', num_sequences=500)):
+        for i, vdata in enumerate(yield_sequences('../data/train_12.dat', num_sequences=50)):
             cube_states, move_states = vdata
-            vinput_tensor = torch.stack(cube_states)
-            voutput_tensor = torch.Tensor(move_states).to(torch.int64)
+            vinput_tensor = torch.stack(cube_states).to(device)
+            voutput_tensor = torch.Tensor(move_states).to(torch.int64).to(device)
             voutputs = model(vinput_tensor)
             vloss = loss_fn(voutputs, voutput_tensor)
             running_vloss += vloss
