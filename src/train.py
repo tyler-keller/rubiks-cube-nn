@@ -1,17 +1,9 @@
 from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import Dataset, DataLoader
-from pycuber.solver import CFOPSolver
 from datetime import datetime
 import torch.optim as optim
 import torch.nn as nn
-import pycuber as pc
 from pycuber import *
-import pandas as pd
-import numpy as np
-import random
 import torch
-import math
-import os
 
 from data import *
 from model import *
@@ -20,7 +12,8 @@ from model import *
 def train_one_epoch(epoch_index, tb_writer, model, device, num_sequences):
     running_loss = 0.
     last_loss = 0.
-    for i, sequence in enumerate(yield_sequences('../data/train_0.dat', num_sequences=num_sequences)):
+    total_loss = 0.
+    for i, sequence in enumerate(yield_full_sequences('../data/train_0.dat', num_sequences=num_sequences)):
         cube_states, move_states = sequence
         input_tensor = torch.stack(cube_states).to(device)
         output_tensor = torch.Tensor(move_states).to(torch.int64).to(device)
@@ -30,14 +23,14 @@ def train_one_epoch(epoch_index, tb_writer, model, device, num_sequences):
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
-        running_loss += loss.item()
-        if i % (num_sequences//5) == 0:
+        total_loss += loss.item()
+        if i % (num_sequences//5) == 0 and i != 0:
             last_loss = running_loss / num_sequences 
             print(f'    batch {i} loss: {last_loss}')
             tb_x = epoch_index * num_sequences + i + 1
             tb_writer.add_scalar('Loss/train', last_loss, tb_x)
             running_loss = 0.
-    return last_loss
+    return total_loss
 
 
 move_mapping = {
@@ -58,7 +51,7 @@ embedding_dim = 64
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
+# model = CubeTransformer(input_dim=num_pieces, out, num_layers, num_heads, num_moves)
 model = CubeRNN(num_pieces=num_pieces, embedding_dim=embedding_dim, hidden_size=model_dim, output_size=output_dim, num_layers=num_layers, device=device)
 loss_fn = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
@@ -83,13 +76,13 @@ for epoch in range(EPOCHS):
     running_vloss = 0.0
     model.eval()
     with torch.no_grad():
-        for i, vdata in enumerate(yield_sequences('../data/train_12.dat', num_sequences=50)):
+        for i, vdata in enumerate(yield_full_sequences('../data/train_12.dat', num_sequences=50)):
             cube_states, move_states = vdata
             vinput_tensor = torch.stack(cube_states).to(device)
             voutput_tensor = torch.Tensor(move_states).to(torch.int64).to(device)
             voutputs = model(vinput_tensor)
             vloss = loss_fn(voutputs, voutput_tensor)
-            running_vloss += vloss
+            running_vloss += vloss.item()
     avg_vloss = running_vloss / (i + 1)
     print('LOSS train {} valid {}'.format(avg_loss, avg_vloss))
     writer.add_scalars('Training vs. Validation Loss',

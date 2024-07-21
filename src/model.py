@@ -3,9 +3,10 @@ import torch.nn as nn
 
 
 class CubeTransformer(nn.Module):
-    def __init__(self, input_dim, model_dim, hidden_dim, num_layers, num_heads, num_moves):
-        super().__init__()
-        self.embedding = nn.Linear(input_dim, model_dim)
+    def __init__(self, input_dim, embedding_dim, model_dim, hidden_dim, num_layers, num_heads, num_moves, device='cpu'):
+        super(CubeTransformer, self).__init__()
+        self.device = device
+        self.embedding = nn.Embedding(input_dim, embedding_dim)
         self.transformer = nn.Transformer(model_dim, num_heads, num_layers)
         self.fc_out = nn.Linear(model_dim, num_moves)
     

@@ -49,7 +49,34 @@ def random_line(filename, prev_lines):
             rand_num = num
         return rand_num, rand_line
 
-def yield_sequences(filename, num_sequences=1000):
+def yield_cross_sequences(filename, num_sequences=1000):
+    i = 0
+    prev_lines = []
+    while i < num_sequences:
+        line_num, line = random_line(filename, prev_lines)
+        prev_lines.append(line_num)
+        cubies_string, solution_string = line.split('|')
+        mapping = {'U2': 'U U', 'L2': 'L L', 'R2': 'R R', 'F2': 'F F', 'D2': 'D D', 'B2': 'B B'}
+        for k, v in mapping.items():
+            solution_string = solution_string.replace(k, v)
+        cubies_set = set([eval(cubie_string) for cubie_string in cubies_string.split(';')])
+        cube = pc.Cube(cubies_set)
+        moves = solution_string.split()
+        cube_states = []
+        move_states = []
+        for move in moves:
+            cube_states.append(encode_cube(cube))
+            move_states.append(encode_move(move))
+            cube.perform_step(move)
+        cube_states.append(encode_cube(cube))
+        move_states.append(encode_move('$'))
+        # if i % 100 == 0:
+        #     print(f'Sequnce {i} of {num_sequences}')
+        i += 1
+        sequence = cube_states, move_states
+        yield sequence
+
+def yield_full_sequences(filename, num_sequences=1000):
     i = 0
     prev_lines = []
     while i < num_sequences:
