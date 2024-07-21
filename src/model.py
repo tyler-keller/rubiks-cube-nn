@@ -22,6 +22,7 @@ class CubeRNN(nn.Module):
         super(CubeRNN, self).__init__()
         self.device = device
         self.hidden_size = hidden_size
+        self.num_layers = num_layers
         self.embedding = nn.Embedding(num_pieces, embedding_dim)
         self.rnn = nn.RNN(embedding_dim, hidden_size, num_layers, batch_first=True)
         self.fc = nn.Linear(hidden_size, output_size)
@@ -29,7 +30,7 @@ class CubeRNN(nn.Module):
     
     def forward(self, x):
         x = self.embedding(x).to(self.device)
-        h0 = torch.zeros(1, x.size(0), self.hidden_size).to(self.device)
+        h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_size).to(self.device)
         out, _ = self.rnn(x, h0)
         out = self.fc(out[:, -1, :]) 
         out = self.softmax(out)

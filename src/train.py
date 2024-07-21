@@ -17,78 +17,6 @@ from data import *
 from model import *
 
 
-def encode_cube(cube):
-    piece_to_index_mapping = {}
-    location_to_array_position_mapping = {}
-    mapping_cube = pc.Cube()
-    index = 0
-    for c in mapping_cube:
-        piece_to_index_mapping[tuple([str(square[1]) for square in c[1]])] = index
-        location_to_array_position_mapping[c[0]] = index
-        index += 1
-    cube_array = [None for _ in range(26)]
-    for i, cubie_tuple in enumerate(cube):
-        location, cubie = cubie_tuple
-        squares = []
-        for square in cubie:
-            squares.append(str(square[1]))
-        squares = tuple(squares)
-        cube_array[location_to_array_position_mapping[location]] = piece_to_index_mapping[squares]
-    return torch.Tensor([c for c in cube_array]).to(torch.int64)
-
-
-def encode_move(move):
-    move_mapping = {
-        'U': 0, 'U\'': 1,
-        'L': 2, 'L\'': 3,
-        'F': 4, 'F\'': 5,
-        'R': 6, 'R\'': 7,
-        'B': 8, 'B\'': 9,
-        'D': 10, 'D\'': 11,
-        '$': 12
-    }
-    return move_mapping[move]
-
-
-def random_line(filename, prev_lines):
-    with open(filename, 'r') as file:
-        rand_line = next(file)
-        rand_num = 0
-        for num, line in enumerate(file, 2):
-            if random.randrange(num) or num in prev_lines:
-                continue
-            rand_line = line
-            rand_num = num
-        return rand_num, rand_line
-
-def yield_sequences(filename, num_sequences=1000):
-    i = 0
-    prev_lines = []
-    while i < num_sequences:
-        line_num, line = random_line(filename, prev_lines)
-        prev_lines.append(line_num)
-        cubies_string, solution_string = line.split('|')
-        mapping = {'U2': 'U U', 'L2': 'L L', 'R2': 'R R', 'F2': 'F F', 'D2': 'D D', 'B2': 'B B'}
-        for k, v in mapping.items():
-            solution_string = solution_string.replace(k, v)
-        cubies_set = set([eval(cubie_string) for cubie_string in cubies_string.split(';')])
-        cube = pc.Cube(cubies_set)
-        moves = solution_string.split()
-        cube_states = []
-        move_states = []
-        for move in moves:
-            cube_states.append(encode_cube(cube))
-            move_states.append(encode_move(move))
-            cube.perform_step(move)
-        cube_states.append(encode_cube(cube))
-        move_states.append(encode_move('$'))
-        if i % 100 == 0:
-            print(f'Sequnce {i} of {num_sequences}')
-        i += 1
-        sequence = cube_states, move_states
-        yield sequence
-
-
 def train_one_epoch(epoch_index, tb_writer, model, device, num_sequences):
     running_loss = 0.
     last_loss = 0.
@@ -103,9 +31,9 @@ def train_one_epoch(epoch_index, tb_writer, model, device, num_sequences):
         optimizer.step()
         running_loss += loss.item()
         running_loss += loss.item()
-        if i % 10 == 0:
-            last_loss = running_loss / 1000 
-            print(f'    batch {i + 1} loss: {last_loss}')
+        if i % (num_sequences//5) == 0:
+            last_loss = running_loss / num_sequences 
+            print(f'    batch {i} loss: {last_loss}')
             tb_x = epoch_index * num_sequences + i + 1
             tb_writer.add_scalar('Loss/train', last_loss, tb_x)
             running_loss = 0.
@@ -122,15 +50,18 @@ move_mapping = {
     '$': 12
 }
 
-model_dim = 1028
+model_dim = 2056
 output_dim = len(move_mapping)
+num_layers = 4
+num_pieces = 26 
+embedding_dim = 64
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # model = CubeTransformer(input_dim, model_dim, num_layers, num_heads, num_moves)
-model = CubeRNN(num_pieces=26, embedding_dim=16, hidden_size=model_dim, output_size=output_dim, num_layers=1, device=device)
+model = CubeRNN(num_pieces=num_pieces, embedding_dim=embedding_dim, hidden_size=model_dim, output_size=output_dim, num_layers=num_layers, device=device)
 loss_fn = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
 if torch.cuda.is_available():
     model.cuda()
@@ -167,6 +98,6 @@ for epoch in range(EPOCHS):
     writer.flush()
     if avg_vloss < best_vloss:
         best_vloss = avg_vloss
-        model_path = 'model_{}_{}'.format(timestamp, epoch)
+        model_path = '../models/model_{}_{}'.format(timestamp, epoch)
         torch.save(model.state_dict(), model_path)
     epoch += 1
