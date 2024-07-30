@@ -10,15 +10,9 @@ The Rubik's cube state is represented as a 1-D Tensor of cube pieces. The solved
 
 The input dims will be the same as described above.
 
-There will be hidden dims -- obviously.
-
 The output dims will represent the next move the model should make.
 
-There are 18 possible moves you can make in any state.
-
-`F`, `R`, `U`, `L`, `B`, `D`, `F'`, `R'`, `U'`, `L'`, `B'`, `D'`, `F2`, `R2`, `U2`, `L2`, `B2`, `D2`
-
-However, we will reduce this down to 12 possible moves, where all double turns are changed to 2 single turns.
+There are 12 possible moves you can make in any state, where all double turns are changed to 2 single turns.
 
 `F`, `R`, `U`, `L`, `B`, `D`, `F'`, `R'`, `U'`, `L'`, `B'`, `D'`
 
@@ -36,11 +30,7 @@ Another option might be to break down the stages of cube solving -- Cross, F2L, 
 The issue w/ an entire cube state to move state sequence is they're different lengths. I'd have to use some type of padding.
 
 
-My goal is to train on enough data that we start to see CFOP-esque moves emerge from the weights.
-
-
-Our sequence data is many-to-one. Input is a sequence of cube states. Output is a class label (indicating what move to take).
-
+My goal is to train on enough data that we start to see CFOP-esque moves emerge.
 
 ## Training
 
